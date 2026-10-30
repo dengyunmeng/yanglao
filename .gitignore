@@ -1,0 +1,37 @@
+# ---------- Node / 前端 ----------
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.timestamp-*.mjs
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- Java / 后端 ----------
+target/
+*.class
+*.jar
+*.war
+.mvn/wrapper/maven-wrapper.jar
+logs/
+*.log
+
+# ---------- IDE ----------
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# ---------- 操作系统 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- 环境与密钥 ----------
+.env
+.env.local
+.env.*.local
