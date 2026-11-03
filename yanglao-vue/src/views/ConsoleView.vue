@@ -184,6 +184,7 @@ import { getCurrentUser } from '../api/auth'
 import { getPendingCourses, reviewCourse, getPendingNews, reviewNews } from '../api/admin'
 import { createCourse, getManagedCourses } from '../api/course'
 import { getManagedBookings, confirmBooking } from '../api/booking'
+import { getToken } from '../utils/session'
 
 const currentUser = ref(null)
 const activeTab = ref('courseReview')
@@ -290,7 +291,7 @@ const doConfirmBooking = async (id) => {
 }
 
 onMounted(async () => {
-  if (!localStorage.getItem('token')) return
+  if (!getToken()) return
   try {
     const res = await getCurrentUser()
     currentUser.value = res.data

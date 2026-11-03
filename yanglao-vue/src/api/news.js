@@ -1,5 +1,31 @@
 import request from '../utils/axios'
 
+// 数据库中的分类名 → 前端使用的分类编码
+const CATEGORY_CODES = {
+  '健康养生': 'health',
+  '反诈警示': 'anti-fraud',
+  '活动通知': 'activity',
+  '政策法规': 'policy',
+  '生活服务': 'life'
+}
+
+// 把后端返回的资讯对象转换为页面使用的结构
+export const normalizeNewsItem = (item = {}) => ({
+  id: item.id,
+  title: item.title || '',
+  excerpt: item.excerpt || '',
+  content: item.content || '',
+  category: CATEGORY_CODES[item.category] || 'health',
+  categoryName: item.category || '健康养生',
+  author: item.source || '平台编辑',
+  publishDate: (item.publishTime || item.createTime || '').slice(0, 10),
+  viewCount: item.viewCount || 0,
+  isHot: item.isHot === 1,
+  tags: [],
+  source: item.source || '',
+  sourceUrl: item.sourceUrl || ''
+})
+
 // 获取新闻分类
 export const getNewsCategories = () => {
   return request.get('/news/categories')

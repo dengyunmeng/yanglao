@@ -16,17 +16,17 @@
                   <i class="bi bi-house"></i> 首页
                 </router-link>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" v-if="!isManager">
                 <router-link to="/health" class="nav-link">
                   <i class="bi bi-heart-pulse"></i> 健康守护
                 </router-link>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" v-if="!isManager">
                 <router-link to="/anti-fraud" class="nav-link">
                   <i class="bi bi-shield-plus"></i> 数字反诈
                 </router-link>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" v-if="!isAdminRole">
                 <router-link to="/classroom" class="nav-link">
                   <i class="bi bi-mortarboard"></i> 银发课堂
                 </router-link>
@@ -65,10 +65,27 @@
             <span><i class="bi bi-calendar"></i> {{ currentNews.publishDate }}</span>
             <span><i class="bi bi-eye"></i> {{ currentNews.viewCount }}次阅读</span>
           </div>
+          <div class="news-source" v-if="currentNews.source">
+            <span class="source-label">
+              <i class="bi bi-newspaper"></i> 来源：{{ currentNews.source }}
+            </span>
+            <a
+              v-if="currentNews.sourceUrl"
+              :href="currentNews.sourceUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="source-link"
+            >
+              查看原文 <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+          </div>
         </div>
 
         <div class="news-body">
           <div class="news-content" v-html="formatContent(currentNews.content)"></div>
+          <p class="news-disclaimer" v-if="currentNews.sourceUrl">
+            本文摘要由本平台编辑整理，完整内容请查看原文。
+          </p>
         </div>
 
         <div class="news-actions mt-4">
@@ -157,36 +174,67 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { isManager as checkManager, isAdmin as checkAdmin } from '../utils/roles'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getNewsById, getNewsByCategory, searchNews } from '../data/news'
+import { getNewsById, getNewsByCategory } from '../data/news'
+import { getNewsDetail as fetchNewsDetailApi, getNewsList as fetchNewsListApi, normalizeNewsItem, addFavorite, removeFavorite, getFavorites } from '../api/news'
+import { getToken } from '../utils/session'
 
 const route = useRoute()
 const router = useRouter()
+// 医生/管理员不展示健康守护、数字反诈入口
+const isManager = checkManager()
+const isAdminRole = checkAdmin()
 
 const currentNews = ref(null)
 const relatedNews = ref([])
 const isCollected = ref(false)
 const shareVisible = ref(false)
 
-const getNewsDetail = () => {
+const getNewsDetail = async () => {
   const newsId = parseInt(route.params.id)
-  currentNews.value = getNewsById(newsId)
-  
-  if (currentNews.value) {
-    document.title = `${currentNews.value.title} - 智慧养老服务平台`
-    
-    const category = currentNews.value.category
-    const sameCategoryNews = getNewsByCategory(category)
-      .filter(n => n.id !== currentNews.value.id)
+  let news = null
+
+  // 优先从接口取（只返回已审核发布的资讯）
+  try {
+    const res = await fetchNewsDetailApi(newsId)
+    if (res.code === 200 && res.data) {
+      news = normalizeNewsItem(res.data)
+    }
+  } catch (e) {
+    // 接口不可用时回退到本地示例数据
+  }
+  if (!news) news = getNewsById(newsId)
+
+  currentNews.value = news
+  if (!news) return
+
+  document.title = `${news.title} - 智慧养老服务平台`
+
+  // 同分类相关推荐
+  try {
+    const res = await fetchNewsListApi({ page: 1, pageSize: 20 })
+    if (res.code === 200 && Array.isArray(res.data?.list)) {
+      relatedNews.value = res.data.list
+        .map(normalizeNewsItem)
+        .filter(n => n.id !== news.id && n.category === news.category)
+        .slice(0, 3)
+    }
+  } catch (e) {
+    relatedNews.value = getNewsByCategory(news.category)
+      .filter(n => n.id !== news.id)
       .slice(0, 3)
-    relatedNews.value = sameCategoryNews
-    
-    const collectedNews = JSON.parse(localStorage.getItem('collectedNews') || '[]')
-    isCollected.value = collectedNews.includes(newsId)
-    
-    currentNews.value.viewCount++
-    localStorage.setItem(`news_${newsId}_views`, currentNews.value.viewCount)
+  }
+
+  // 收藏状态以服务端为准（未登录时视为未收藏）
+  if (getToken()) {
+    try {
+      const res = await getFavorites()
+      if (res.code === 200 && Array.isArray(res.data)) {
+        isCollected.value = res.data.some(n => n.id === newsId)
+      }
+    } catch (e) { /* 忽略 */ }
   }
 }
 
@@ -230,20 +278,24 @@ const formatContent = (content) => {
   }).join('')
 }
 
-const handleCollect = () => {
+const handleCollect = async () => {
+  if (!getToken()) {
+    ElMessage.warning('请先登录后再收藏资讯')
+    return
+  }
   const newsId = currentNews.value.id
-  let collectedNews = JSON.parse(localStorage.getItem('collectedNews') || '[]')
-  
-  if (isCollected.value) {
-    collectedNews = collectedNews.filter(id => id !== newsId)
-    localStorage.setItem('collectedNews', JSON.stringify(collectedNews))
-    isCollected.value = false
-    ElMessage.success('已取消收藏')
-  } else {
-    collectedNews.push(newsId)
-    localStorage.setItem('collectedNews', JSON.stringify(collectedNews))
-    isCollected.value = true
-    ElMessage.success('收藏成功')
+  try {
+    if (isCollected.value) {
+      await removeFavorite(newsId)
+      isCollected.value = false
+      ElMessage.success('已取消收藏')
+    } else {
+      await addFavorite(newsId)
+      isCollected.value = true
+      ElMessage.success('收藏成功')
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '操作失败')
   }
 }
 
@@ -334,6 +386,48 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.3rem;
+}
+
+/* 文章来源与原文跳转 */
+.news-source {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 0.6rem;
+  padding: 0.4rem 0.8rem;
+  background-color: #f4f8fb;
+  border-left: 3px solid var(--primary-color);
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.source-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-light);
+}
+
+.source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.source-link:hover {
+  text-decoration: underline;
+}
+
+.news-disclaimer {
+  margin-top: 1.5rem;
+  padding-top: 0.8rem;
+  border-top: 1px dashed #dcdfe6;
+  font-size: 0.85rem;
+  color: var(--text-light);
+  text-indent: 0;
 }
 
 .news-body {

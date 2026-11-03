@@ -45,20 +45,49 @@
           <el-skeleton :rows="3" animated />
         </div>
 
-        <div v-else-if="myCourses.length > 0" class="course-grid">
-          <el-card v-for="(course, i) in myCourses" :key="course.id" :body-style="{ padding: '0px' }" shadow="hover">
-            <div class="course-cover" :style="{ background: styleOf(i).bgColor }">
-              <i :class="styleOf(i).icon"></i>
-              <span class="course-tag">{{ course.tag || '学习中' }}</span>
-            </div>
-            <div class="course-info">
-              <h5>{{ course.name }}</h5>
-              <p>{{ course.description }}</p>
-              <el-button type="primary" style="width: 100%;" @click="continueCourse(course)">
-                <i class="bi bi-play-circle"></i> 继续学习
-              </el-button>
-            </div>
-          </el-card>
+        <div v-else-if="myCourses.length > 0">
+          <div class="course-filter">
+            <el-radio-group v-model="typeFilter" size="small">
+              <el-radio-button label="all">全部（{{ myCourses.length }}）</el-radio-button>
+              <el-radio-button label="ONLINE">线上课（{{ onlineCount }}）</el-radio-button>
+              <el-radio-button label="OFFLINE">线下课（{{ offlineCount }}）</el-radio-button>
+            </el-radio-group>
+          </div>
+
+          <div class="course-grid">
+            <el-card v-for="(course, i) in filteredCourses" :key="course.id" :body-style="{ padding: '0px' }" shadow="hover">
+              <div class="course-cover" :style="{ background: styleOf(i).bgColor }">
+                <i :class="styleOf(i).icon"></i>
+                <span class="course-tag">{{ course.tag || '学习中' }}</span>
+                <span class="course-type" :class="isOffline(course) ? 'type-offline' : 'type-online'">
+                  <i :class="isOffline(course) ? 'bi bi-geo-alt' : 'bi bi-camera-video'"></i>
+                  {{ isOffline(course) ? '线下课' : '线上课' }}
+                </span>
+              </div>
+              <div class="course-info">
+                <h5>{{ course.name }}</h5>
+                <p>{{ course.description }}</p>
+
+                <!-- 线下课显示开课时间与地点 -->
+                <div v-if="isOffline(course)" class="course-meta">
+                  <span v-if="course.startTime"><i class="bi bi-clock"></i> {{ formatTime(course.startTime) }}</span>
+                  <span v-if="course.location"><i class="bi bi-geo-alt"></i> {{ course.location }}</span>
+                </div>
+
+                <el-button
+                  v-if="isOffline(course)"
+                  type="success"
+                  style="width: 100%;"
+                  @click="viewBooking(course)"
+                >
+                  <i class="bi bi-calendar-check"></i> 查看预约安排
+                </el-button>
+                <el-button v-else type="primary" style="width: 100%;" @click="continueCourse(course)">
+                  <i class="bi bi-play-circle"></i> 继续学习
+                </el-button>
+              </div>
+            </el-card>
+          </div>
         </div>
 
         <el-empty v-else description="还没有加入任何课程">
@@ -70,14 +99,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getMyCourses } from '../api/course'
+import { getToken } from '../utils/session'
 
 const router = useRouter()
 const loading = ref(false)
 const myCourses = ref([])
+const typeFilter = ref('all')
 
 // 课程卡片样式（按顺序循环套用）
 const courseStyles = [
@@ -98,6 +129,28 @@ const courseVideoUrls = {
 }
 
 const styleOf = (index) => courseStyles[index % courseStyles.length]
+
+// 是否线下课
+const isOffline = (course) => course.type === 'OFFLINE'
+
+const onlineCount = computed(() => myCourses.value.filter(c => !isOffline(c)).length)
+const offlineCount = computed(() => myCourses.value.filter(c => isOffline(c)).length)
+
+const filteredCourses = computed(() => {
+  if (typeFilter.value === 'all') return myCourses.value
+  return myCourses.value.filter(c => typeFilter.value === 'OFFLINE' ? isOffline(c) : !isOffline(c))
+})
+
+// 后端返回 ISO 时间，展示时转成「YYYY-MM-DD HH:mm」
+const formatTime = (time) => {
+  if (!time) return ''
+  return String(time).replace('T', ' ').slice(0, 16)
+}
+
+// 线下课：跳转到课程预约页查看/管理预约
+const viewBooking = () => {
+  router.push({ path: '/classroom', query: { tab: 'book' } })
+}
 
 // 继续学习：跳转到该课程配套的教学视频
 const continueCourse = (course) => {
@@ -123,7 +176,7 @@ const loadMyCourses = async () => {
 
 onMounted(() => {
   // 「我的课程」需要登录，未登录时引导到个人中心
-  if (!localStorage.getItem('token')) {
+  if (!getToken()) {
     ElMessage.warning('请先登录后查看我的课程')
     router.push('/profile')
     return
@@ -142,6 +195,12 @@ onMounted(() => {
   background: #fff;
   padding: 20px;
   border-radius: 8px;
+}
+
+.course-filter {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
 }
 
 .course-grid {
@@ -174,6 +233,41 @@ onMounted(() => {
   border-radius: 20px;
   font-size: 0.8rem;
   color: #333;
+}
+
+/* 线上/线下课程类型标识 */
+.course-type {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  color: #fff;
+}
+
+.type-online {
+  background: rgba(64, 158, 255, 0.9);
+}
+
+.type-offline {
+  background: rgba(103, 194, 58, 0.9);
+}
+
+/* 线下课的上课时间与地点 */
+.course-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.course-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .course-info {

@@ -14,13 +14,13 @@
               <li class="nav-item">
                 <router-link to="/" class="nav-link"><i class="bi bi-house"></i> 首页</router-link>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" v-if="!isManager">
                 <router-link to="/health" class="nav-link"><i class="bi bi-heart-pulse"></i> 健康守护</router-link>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" v-if="!isManager">
                 <router-link to="/anti-fraud" class="nav-link"><i class="bi bi-shield-plus"></i> 数字反诈</router-link>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" v-if="!isAdminRole">
                 <router-link to="/classroom" class="nav-link"><i class="bi bi-mortarboard"></i> 银发课堂</router-link>
               </li>
               <li class="nav-item">
@@ -125,7 +125,8 @@
             <el-card>
               <el-tabs v-model="profileTab">
                 <el-tab-pane label="健康档案" name="health">
-                  <div class="health-summary">
+                  <el-empty v-if="!currentUser" description="登录后查看健康档案" />
+                  <div v-else class="health-summary">
                     <h5><i class="bi bi-clipboard2-pulse"></i> 健康数据概览</h5>
                     <el-row :gutter="20" class="mt-3">
                       <el-col :span="12" :xs="24">
@@ -279,11 +280,11 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getNewsById } from '../data/news'
 import { login, register, logout, updateUser, getCurrentUser, changePassword, resetPassword } from '../api/auth'
-import { getFavorites, removeFavorite as removeFavoriteApi, clearFavorites as clearFavoritesApi } from '../api/news'
+import { getFavorites, removeFavorite as removeFavoriteApi, clearFavorites as clearFavoritesApi, normalizeNewsItem } from '../api/news'
 import { getHealthStats, getCheckinDays } from '../api/health'
 import { getBookingCount } from '../api/booking'
+import { getHealthRecords } from '../utils/healthStore'
 
 const authTab = ref('login')
 const profileTab = ref('health')
@@ -302,6 +303,9 @@ const isManager = computed(() => {
   const roles = currentUser.value?.roles || []
   return roles.includes('ROLE_ADMIN') || roles.includes('ROLE_DOCTOR')
 })
+
+// 系统管理员不展示银发课堂入口
+const isAdminRole = computed(() => (currentUser.value?.roles || []).includes('ROLE_ADMIN'))
 
 const registerForm = reactive({
   name: '',
@@ -409,9 +413,13 @@ const settingsRules = {
   ]
 }
 
+// 打卡记录：依赖登录用户，未登录时为空，登录后自动重新读取
+const healthRecordsCache = computed(() => {
+  return currentUser.value ? getHealthRecords() : []
+})
+
 const checkinDays = computed(() => {
-  const records = JSON.parse(localStorage.getItem('healthRecords') || '[]')
-  return records.length
+  return healthRecordsCache.value.length
 })
 
 const courseCount = computed(() => {
@@ -425,12 +433,11 @@ const bookingCount = computed(() => {
 })
 
 const recentRecords = computed(() => {
-  const records = JSON.parse(localStorage.getItem('healthRecords') || '[]')
-  return records.slice(0, 5)
+  return healthRecordsCache.value.slice(0, 5)
 })
 
 const avgBp = computed(() => {
-  const records = JSON.parse(localStorage.getItem('healthRecords') || '[]')
+  const records = healthRecordsCache.value
   if (records.length === 0) return '--/-- mmHg'
   const total = records.reduce((sum, r) => {
     const [high] = r.bloodPressure.split('/').map(Number)
@@ -441,32 +448,41 @@ const avgBp = computed(() => {
 })
 
 const avgBs = computed(() => {
-  const records = JSON.parse(localStorage.getItem('healthRecords') || '[]')
+  const records = healthRecordsCache.value
   if (records.length === 0) return '-- mmol/L'
   const total = records.reduce((sum, r) => sum + parseFloat(r.bloodSugar), 0)
   return (total / records.length).toFixed(1) + ' mmol/L'
 })
 
 const avgSleep = computed(() => {
-  const records = JSON.parse(localStorage.getItem('healthRecords') || '[]')
+  const records = healthRecordsCache.value
   if (records.length === 0) return '-- 小时'
   const total = records.reduce((sum, r) => sum + parseFloat(r.sleepHours), 0)
   return (total / records.length).toFixed(1) + ' 小时'
 })
 
 const lastCheckin = computed(() => {
-  const records = JSON.parse(localStorage.getItem('healthRecords') || '[]')
+  const records = healthRecordsCache.value
   return records.length > 0 ? records[0].date : '--'
 })
 
-const collectedNews = computed(() => {
-  const collectedIds = JSON.parse(localStorage.getItem('collectedNews') || '[]')
-  return collectedIds.map(id => getNewsById(id)).filter(Boolean)
-})
+const collectedNews = ref([])
+
+const loadCollectedNews = async () => {
+  try {
+    const res = await getFavorites()
+    if (res.code === 200 && Array.isArray(res.data)) {
+      collectedNews.value = res.data.map(normalizeNewsItem)
+    }
+  } catch (e) {
+    // 未登录或接口不可用时保持为空
+  }
+}
 
 const removeCollect = async (id) => {
   try {
     await removeFavoriteApi(id)
+    await loadCollectedNews()
     ElMessage.success('已取消收藏')
   } catch (error) {
     ElMessage.error('取消收藏失败')
@@ -476,6 +492,7 @@ const removeCollect = async (id) => {
 const clearAllCollect = async () => {
   try {
     await clearFavoritesApi()
+    await loadCollectedNews()
     ElMessage.success('已清空全部收藏')
   } catch (error) {
     ElMessage.error('清空收藏失败')
@@ -494,6 +511,7 @@ const handleLogin = async () => {
       settingsForm.avatar = response.data.user?.avatar || ''
       ElMessage.success('登录成功！')
       loginFormRef.value.resetFields()
+      loadCollectedNews()
     }
   } catch (error) {
     if (error.response?.data?.message) {
@@ -640,6 +658,7 @@ const checkLoginStatus = async () => {
 
 onMounted(() => {
   checkLoginStatus()
+  loadCollectedNews()
 })
 </script>
 

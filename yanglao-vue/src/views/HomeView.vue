@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
   <div class="home-view">
     <header class="main-header">
       <nav class="navbar navbar-expand-lg">
@@ -16,19 +16,24 @@
                   <i class="bi bi-house"></i> 首页
                 </router-link>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" v-if="!isManager">
                 <router-link to="/health" class="nav-link">
                   <i class="bi bi-heart-pulse"></i> 健康守护
                 </router-link>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" v-if="!isManager">
                 <router-link to="/anti-fraud" class="nav-link">
                   <i class="bi bi-shield-plus"></i> 数字反诈
                 </router-link>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" v-if="!isAdminRole">
                 <router-link to="/classroom" class="nav-link">
                   <i class="bi bi-mortarboard"></i> 银发课堂
+                </router-link>
+              </li>
+              <li class="nav-item" v-if="isManager">
+                <router-link to="/console" class="nav-link">
+                  <i class="bi bi-speedometer2"></i> 管理控制台
                 </router-link>
               </li>
               <li class="nav-item">
@@ -76,6 +81,14 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="container mt-4" v-if="isManager">
+        <div class="manager-tip">
+          <i class="bi bi-info-circle"></i>
+          <span>您当前登录为{{ isAdminRole ? '系统管理员' : '健康管理员' }}，普通用户功能已隐藏，业务处理请前往管理控制台。</span>
+          <el-button type="primary" size="small" @click="goConsole">进入管理控制台</el-button>
         </div>
       </div>
 
@@ -318,17 +331,21 @@
                       <i class="bi bi-bookmark"></i> 便捷入口
                     </h5>
                     <div class="quick-link-list">
-                      <router-link to="/health" class="quick-link-item">
+                      <router-link to="/health" class="quick-link-item" v-if="!isManager">
                         <i class="bi bi-heart-pulse"></i>
                         <span>健康打卡</span>
                       </router-link>
-                      <router-link to="/anti-fraud" class="quick-link-item">
+                      <router-link to="/anti-fraud" class="quick-link-item" v-if="!isManager">
                         <i class="bi bi-shield-plus"></i>
                         <span>防诈中心</span>
                       </router-link>
-                      <router-link to="/classroom" class="quick-link-item">
+                      <router-link to="/classroom" class="quick-link-item" v-if="!isAdminRole">
                         <i class="bi bi-mortarboard"></i>
                         <span>银发课堂</span>
+                      </router-link>
+                      <router-link to="/console" class="quick-link-item" v-if="isManager">
+                        <i class="bi bi-speedometer2"></i>
+                        <span>管理控制台</span>
                       </router-link>
                       <router-link to="/profile" class="quick-link-item">
                         <i class="bi bi-person-circle"></i>
@@ -399,7 +416,9 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { newsCategories, newsList, getNewsByCategory, searchNews, getHotNews, getNewsById } from '../data/news'
+import { newsCategories, newsList } from '../data/news'
+import { getNewsList as fetchNewsListApi, normalizeNewsItem } from '../api/news'
+import { isManager as checkManager, isAdmin as checkAdmin } from '../utils/roles'
 import hero from '@/assets/hero.png'
 import heroImage from '@/assets/elderly-couple.png'
 import first2 from '@/assets/banner/first2.png'
@@ -412,6 +431,11 @@ import newsImg4 from '@/assets/news-4.png'
 const listImages = [newsImg1, newsImg2, newsImg3, newsImg4]
 
 const router = useRouter()
+
+// 当前角色：医生/管理员不展示普通用户的业务入口
+const isManager = checkManager()
+const isAdminRole = checkAdmin()
+const goConsole = () => router.push('/console')
 const isDarkMode = ref(localStorage.getItem('darkMode') === 'true')
 const toastVisible = ref(false)
 const toastMessage = ref('')
@@ -419,6 +443,22 @@ const activeCategory = ref('all')
 const searchKeyword = ref('')
 const displayCount = ref(6)
 const loading = ref(false)
+
+// 从后端接口加载的资讯（失败时为空，自动回退到本地示例数据）
+const remoteNews = ref([])
+
+const loadRemoteNews = async () => {
+  try {
+    const res = await fetchNewsListApi({ page: 1, pageSize: 50 })
+    if (res.code === 200 && Array.isArray(res.data?.list)) {
+      remoteNews.value = res.data.list.map(normalizeNewsItem)
+    }
+  } catch (e) {
+    // 接口不可用时保持本地兜底数据，保证页面正常展示
+  }
+}
+
+const newsSource = computed(() => (remoteNews.value.length ? remoteNews.value : newsList))
 
 const animatedStats = reactive({
   served: 0,
@@ -435,10 +475,17 @@ const targetStats = {
 }
 
 const filteredNews = computed(() => {
-  if (searchKeyword.value) {
-    return searchNews(searchKeyword.value)
+  const source = newsSource.value
+  const keyword = searchKeyword.value.trim()
+  if (keyword) {
+    return source.filter(n =>
+      (n.title || '').includes(keyword) ||
+      (n.excerpt || '').includes(keyword) ||
+      (n.content || '').includes(keyword)
+    )
   }
-  return getNewsByCategory(activeCategory.value)
+  if (activeCategory.value === 'all') return source
+  return source.filter(n => n.category === activeCategory.value)
 })
 
 const displayNews = computed(() => {
@@ -450,17 +497,25 @@ const hasMoreNews = computed(() => {
 })
 
 const hotTopics = computed(() => {
-  return getHotNews().slice(0, 5)
+  const hot = newsSource.value.filter(n => n.isHot)
+  const list = hot.length ? hot : [...newsSource.value].sort((a, b) => b.viewCount - a.viewCount)
+  return list.slice(0, 5)
 })
 
 const myCollections = computed(() => {
-  const collectedIds = JSON.parse(localStorage.getItem('collectedNews') || '[]')
-  return collectedIds.slice(0, 3).map(id => getNewsById(id)).filter(Boolean)
+  let collectedIds = []
+  try {
+    collectedIds = JSON.parse(localStorage.getItem('collectedNews') || '[]')
+  } catch (e) { collectedIds = [] }
+  return collectedIds
+    .slice(0, 3)
+    .map(id => newsSource.value.find(n => n.id === id))
+    .filter(Boolean)
 })
 
 const searchResults = computed(() => {
   if (!searchKeyword.value) return []
-  return searchNews(searchKeyword.value)
+  return filteredNews.value
 })
 
 const animateNumber = (target, key) => {
@@ -565,6 +620,7 @@ onMounted(() => {
     document.body.classList.add('dark-mode')
   }
   animateAllStats()
+  loadRemoteNews()
 
   const script = document.createElement('script')
   script.src = 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js'
@@ -613,6 +669,23 @@ onMounted(() => {
 
 .news-tabs {
   margin-bottom: 1.5rem;
+}
+
+/* 医生/管理员登录后的提示条 */
+.manager-tip {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1.2rem;
+  background: #eef4ff;
+  border: 1px solid #c6ddff;
+  border-radius: 8px;
+  color: #2d5b9e;
+  font-size: 0.95rem;
+}
+
+.manager-tip i {
+  font-size: 1.2rem;
 }
 
 .news-tabs :deep(.el-tabs__item) {

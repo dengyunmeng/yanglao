@@ -1,11 +1,12 @@
 import request from '../utils/axios'
+import { setToken, setUser, clearAuth } from '../utils/session'
 
 // 登录
 export const login = async (phone, password) => {
   const res = await request.post('/auth/login', { phone, password })
   if (res.code === 200) {
-    localStorage.setItem('token', res.data.token)
-    localStorage.setItem('currentUser', JSON.stringify(res.data.user))
+    setToken(res.data.token)
+    setUser(res.data.user)
   }
   return res
 }
@@ -24,7 +25,7 @@ export const resetPassword = async (phone, newPassword) => {
 export const getCurrentUser = async () => {
   const res = await request.get('/auth/me')
   if (res.code === 200) {
-    localStorage.setItem('currentUser', JSON.stringify(res.data))
+    setUser(res.data)
   }
   return res
 }
@@ -34,8 +35,7 @@ export const logout = async () => {
   try {
     await request.post('/auth/logout')
   } catch (e) { /* 忽略后端可能的未登录错误 */ }
-  localStorage.removeItem('token')
-  localStorage.removeItem('currentUser')
+  clearAuth()
   return { code: 200, message: '退出成功' }
 }
 
@@ -43,7 +43,7 @@ export const logout = async () => {
 export const updateUser = async (userData) => {
   const res = await request.put('/user', userData)
   if (res.code === 200) {
-    localStorage.setItem('currentUser', JSON.stringify(res.data))
+    setUser(res.data)
   }
   return res
 }

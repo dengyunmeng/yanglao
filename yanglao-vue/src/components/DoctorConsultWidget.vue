@@ -90,6 +90,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { askQuestion, getMyConsultations, getAnsweredConsultations, getPendingConsultations, answerConsultation } from '../api/consultation'
+import { getToken, getUser } from '../utils/session'
 
 const visible = ref(false)
 const tab = ref('ask')
@@ -100,12 +101,8 @@ const pendingList = ref([])
 const answeredList = ref([])
 const answers = reactive({})
 
-const isLoggedIn = computed(() => !!localStorage.getItem('token'))
-const roles = computed(() => {
-  try {
-    return JSON.parse(localStorage.getItem('currentUser') || 'null')?.roles || []
-  } catch { return [] }
-})
+const isLoggedIn = computed(() => !!getToken())
+const roles = computed(() => getUser()?.roles || [])
 const isStaff = computed(() => roles.value.includes('ROLE_DOCTOR') || roles.value.includes('ROLE_ADMIN'))
 
 const openDrawer = async () => {

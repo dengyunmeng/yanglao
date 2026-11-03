@@ -21,6 +21,10 @@ public class News {
 
     private String coverUrl;
 
+    private String source;
+
+    private String sourceUrl;
+
     private Long authorId;
 
     private Integer viewCount;

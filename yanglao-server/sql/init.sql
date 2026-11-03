@@ -258,6 +258,8 @@ CREATE TABLE news (
   content     LONGTEXT,
   category    VARCHAR(30)  DEFAULT NULL,
   cover_url   VARCHAR(255) DEFAULT NULL,
+  source      VARCHAR(50)  DEFAULT NULL COMMENT '文章来源，如 人民网·健康频道',
+  source_url  VARCHAR(500) DEFAULT NULL COMMENT '原文链接',
   author_id   BIGINT       DEFAULT NULL,
   view_count  INT          NOT NULL DEFAULT 0,
   is_hot      TINYINT      NOT NULL DEFAULT 0,
@@ -321,13 +323,18 @@ INSERT INTO news_category (name, code, sort) VALUES
   ('政策法规', 'POLICY', 4),
   ('生活服务', 'LIFE', 5);
 
--- 示例资讯
-INSERT INTO news (title, excerpt, content, category, author_id, view_count, is_hot, publish_time, status) VALUES
-  ('老年人如何预防高血压', '高血压是老年人常见慢性病，合理饮食和规律运动是关键。', '高血压是老年人常见的慢性病之一，建议低盐低脂饮食，每天保证适量有氧运动，定期监测血压并遵医嘱服药。', '健康养生', 2, 328, 1, NOW(), 1),
-  ('警惕"冒充公检法"诈骗新套路', '近期多发，骗子冒充警察要求转账"安全账户"', '骗子冒充公检法人员打电话，说你的身份证涉嫌洗钱，要求把钱转到"安全账户"。公安机关绝不会电话办案、要求转账。', '反诈警示', 4, 512, 1, NOW(), 1),
-  ('社区重阳节活动预告', '本周五上午9点，社区老年活动中心举办重阳节联欢会。', '欢迎各位老人前来参加，现场有文艺表演、健康体检和节日礼品发放。', '活动通知', 4, 120, 0, NOW(), 1),
-  ('国家基本养老金上调 3.8%', '2026 年退休人员基本养老金再次上调。', '根据人力资源和社会保障部通知，2026 年退休人员基本养老金总体调整水平为上年退休人员月人均基本养老金的 3.8%。', '政策法规', 4, 876, 1, NOW(), 1),
-  ('手机防诈骗设置小技巧', '开启这些功能，让骗子无从下手', '1. 开启手机陌生号码拦截；2. 关闭陌生人短信预览；3. 不要点击陌生链接；4. 安装国家反诈中心 APP。', '生活服务', 4, 234, 0, NOW(), 1);
+-- 示例资讯（source/source_url 记录真实来源，方便跳转原文）
+INSERT INTO news (title, excerpt, content, category, cover_url, source, source_url, author_id, view_count, is_hot, publish_time, status) VALUES
+  ('老年人如何预防高血压', '高血压是老年人常见慢性病，合理饮食和规律运动是关键。', '高血压是老年人常见的慢性病之一，建议低盐低脂饮食，每天保证适量有氧运动，定期监测血压并遵医嘱服药。', '健康养生', NULL, '人民网·健康频道', 'http://health.people.com.cn/', 2, 328, 1, NOW(), 1),
+  ('警惕"冒充公检法"诈骗新套路', '近期多发，骗子冒充警察要求转账"安全账户"', '骗子冒充公检法人员打电话，说你的身份证涉嫌洗钱，要求把钱转到"安全账户"。公安机关绝不会电话办案、要求转账。', '反诈警示', NULL, '人民网·法治频道', 'http://legal.people.com.cn/', 4, 512, 1, NOW(), 1),
+  ('社区重阳节活动预告', '本周五上午9点，社区老年活动中心举办重阳节联欢会。', '欢迎各位老人前来参加，现场有文艺表演、健康体检和节日礼品发放。', '活动通知', NULL, '智慧养老平台', NULL, 4, 120, 0, NOW(), 1),
+  ('国家基本养老金上调 3.8%', '2026 年退休人员基本养老金再次上调。', '根据人力资源和社会保障部通知，2026 年退休人员基本养老金总体调整水平为上年退休人员月人均基本养老金的 3.8%。', '政策法规', NULL, '人民网·时政频道', 'http://politics.people.com.cn/', 4, 876, 1, NOW(), 1),
+  ('手机防诈骗设置小技巧', '开启这些功能，让骗子无从下手', '1. 开启手机陌生号码拦截；2. 关闭陌生人短信预览；3. 不要点击陌生链接；4. 安装国家反诈中心 APP。', '生活服务', NULL, '人民网·社会频道', 'http://society.people.com.cn/', 4, 234, 0, NOW(), 1);
+
+-- 待审核资讯（用于演示系统管理员的资讯审核流程，status=0 前台不可见）
+INSERT INTO news (title, excerpt, content, category, source, author_id, view_count, is_hot, status) VALUES
+  ('秋季老年人饮食注意事项', '入秋后饮食宜温补，少食生冷，注意润燥。', '入秋后气温下降，老年人饮食宜温补，多吃梨、银耳等润燥食物，少食生冷瓜果，晚餐不宜过饱。', '健康养生', '智慧养老平台', 2, 0, 0, 0),
+  ('关于开展老年人免费体检的通知', '下周三上午社区医院为65岁以上老人提供免费体检。', '体检项目包括血压、血糖、心电图等，请携带身份证空腹前往社区医院一楼大厅。', '活动通知', '智慧养老平台', 4, 0, 0, 0);
 
 -- 健康小知识
 INSERT INTO health_tip (title, content, category, author_id) VALUES

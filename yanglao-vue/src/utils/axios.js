@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { getToken, clearAuth } from './session'
 
 // 创建 axios 实例
 const request = axios.create({
@@ -13,8 +14,8 @@ const request = axios.create({
 // 请求拦截器
 request.interceptors.request.use(
   config => {
-    // 从 localStorage 获取 token（如果有）
-    const token = localStorage.getItem('token')
+    // 从 sessionStorage 获取 token（按标签页隔离，支持多窗口不同账号）
+    const token = getToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -46,15 +47,14 @@ request.interceptors.response.use(
       switch (status) {
         case 401:
           // 未登录时访问需登录的接口属于正常浏览行为，不弹提示
-          if (localStorage.getItem('token')) {
+          if (getToken()) {
             ElMessage.error('登录已过期，请重新登录')
           }
-          localStorage.removeItem('token')
-          localStorage.removeItem('currentUser')
+          clearAuth()
           break
         case 403:
           // 未登录（无 token）被拦截属于正常情况，静默处理；带了 token 仍被拒才提示
-          if (localStorage.getItem('token')) {
+          if (getToken()) {
             ElMessage.error('拒绝访问')
           }
           break

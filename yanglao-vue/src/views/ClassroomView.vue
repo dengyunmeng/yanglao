@@ -14,10 +14,10 @@
               <li class="nav-item">
                 <router-link to="/" class="nav-link"><i class="bi bi-house"></i> 首页</router-link>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" v-if="!isManager">
                 <router-link to="/health" class="nav-link"><i class="bi bi-heart-pulse"></i> 健康守护</router-link>
               </li>
-              <li class="nav-item">
+              <li class="nav-item" v-if="!isManager">
                 <router-link to="/anti-fraud" class="nav-link"><i class="bi bi-shield-plus"></i> 数字反诈</router-link>
               </li>
               <li class="nav-item">
@@ -172,13 +172,17 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { isManager as checkManager } from '../utils/roles'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getCourses as fetchCourses, joinCourse } from '../api/course'
 import { createBooking, getBookings as fetchBookings, cancelBooking } from '../api/booking'
+import { getToken, getUser } from '../utils/session'
 
 const route = useRoute()
 const router = useRouter()
+// 医生/管理员不展示健康守护、数字反诈入口
+const isManager = checkManager()
 const activeTab = ref(route.query.tab || 'list')
 const loading = ref(false)
 const submitting = ref(false)
@@ -270,7 +274,7 @@ const confirmStartCourse = async () => {
 
   courseDialogVisible.value = false
 
-  if (!localStorage.getItem('token')) {
+  if (!getToken()) {
     ElMessage.warning('请先登录后再学习课程')
     router.push('/profile')
     return
@@ -374,11 +378,11 @@ const loadBookings = async () => {
 onMounted(async () => {
   await loadCourses()
   // 「课程预约」需要登录，未登录时不发请求，避免 403
-  if (localStorage.getItem('token')) {
+  if (getToken()) {
     loadBookings()
     // 已登录时预填姓名和手机号，少输几个字
     try {
-      const user = JSON.parse(localStorage.getItem('currentUser') || 'null')
+      const user = getUser()
       if (user) {
         bookForm.name = user.name || ''
         bookForm.phone = user.phone || ''

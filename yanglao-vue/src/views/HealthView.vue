@@ -199,6 +199,7 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { getHealthRecords, saveHealthRecords } from '../utils/healthStore'
 
 const route = useRoute()
 const activeTab = ref(route.query.tab || 'checkin')
@@ -306,9 +307,9 @@ const submitCheckin = async () => {
         note: checkinForm.note
       }
 
-      let records = JSON.parse(localStorage.getItem('healthRecords') || '[]')
+      let records = getHealthRecords()
       records.unshift(data)
-      localStorage.setItem('healthRecords', JSON.stringify(records))
+      saveHealthRecords(records)
 
       setTimeout(() => {
         submitting.value = false
@@ -332,13 +333,12 @@ const resetForm = () => {
 
 const loadRecords = () => {
   loading.value = true
-  const records = JSON.parse(localStorage.getItem('healthRecords') || '[]')
-  healthRecords.value = records
+  healthRecords.value = getHealthRecords()
   loading.value = false
 }
 
 const exportRecords = () => {
-  const records = JSON.parse(localStorage.getItem('healthRecords') || '[]')
+  const records = getHealthRecords()
   if (records.length === 0) {
     ElMessage.warning('暂无数据可导出')
     return
